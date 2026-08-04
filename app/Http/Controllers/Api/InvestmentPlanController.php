@@ -1,0 +1,239 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\InvestmentPayment;
+use App\Models\InvestmentPlan;
+use Illuminate\Support\Facades\Auth; 
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+
+class InvestmentPlanController extends Controller
+{
+    // GET all plans
+    public function index()
+    {
+        return response()->json([
+            'data' => InvestmentPlan::all()
+        ]);
+    }
+
+    // GET /api/investment-plans/sync — nothing seeds this table
+    // otherwise. selar_payment_link is deliberately left null: that has
+    // to be a real link from your actual Selar seller account, not
+    // something fabricated here.
+    public function sync()
+    {
+        $defaults = [
+            ['plan_name' => 'Starter', 'min_amount' => 100, 'profit_percent' => 10, 'duration' => 30, 'status' => 'active'],
+            ['plan_name' => 'Growth', 'min_amount' => 500, 'profit_percent' => 18, 'duration' => 60, 'status' => 'active'],
+            ['plan_name' => 'Premium', 'min_amount' => 2000, 'profit_percent' => 30, 'duration' => 90, 'status' => 'active'],
+        ];
+
+        foreach ($defaults as $plan) {
+            InvestmentPlan::firstOrCreate(['plan_name' => $plan['plan_name']], $plan);
+        }
+
+        return response()->json(['data' => InvestmentPlan::all()]);
+    }
+
+    public function userInvestments()
+    {
+        return response()->json([
+            'data' => InvestmentPayment::where('user_id', Auth::id())->get()
+        ]);
+    }
+
+
+    public function createInvestment(Request $request)
+    {
+        $request->validate([
+            'plan_name' => 'required|string',
+            'amount' => 'required|numeric|min:1',
+        ]);
+
+        $user = Auth::user();
+
+        // Find plan
+        $plan = InvestmentPlan::where('plan_name', $request->plan_name)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$plan) {
+            return response()->json(['error' => 'Investment plan not found or inactive'], 404);
+        }
+
+        // Cast duration safely
+        $duration = (int) $plan->duration;
+
+        if ($duration <= 0) {
+            return response()->json(['error' => 'Invalid plan duration'], 422);
+        }
+
+        // Minimum amount check
+        if ($request->amount < $plan->min_amount) {
+            return response()->json([
+                'error' => "Minimum amount for {$plan->plan_name} is \${$plan->min_amount}"
+            ], 422);
+        }
+
+        // Selar link
+        if (!$plan->selar_payment_link) {
+            return response()->json(['error' => 'Payment isn\'t set up for this plan yet. Contact support.'], 422);
+        }
+
+        $selarLink = $plan->selar_payment_link
+            . '?amount=' . $request->amount
+            . '&user_id=' . $user->id
+            . '&plan=' . urlencode($plan->plan_name);
+
+        // Create investment safely
+        $investment = InvestmentPayment::create([
+            'user_id' => $user->id,
+            'plan_name' => $plan->plan_name,
+            'amount' => $request->amount,
+            'profit_percent' => $plan->profit_percent,
+            'expected_profit' => ($request->amount * $plan->profit_percent / 100),
+            'duration' => $duration,
+            'status' => 'pending',
+            'start_date' => now(),
+            'end_date' => now()->addDays($duration),
+            'transaction_id' => 'TXN-' . Str::uuid(),
+            'selar_payment_link' => $selarLink,
+        ]);
+
+        // Process earnings ONLY if plan is active
+        if ($plan->status === 'active') {
+            $this->processEarnings();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $investment,
+            'payment_url' => $selarLink,
+            'message' => 'Investment created successfully. Continue to payment...',
+        ]);
+    }
+
+
+    // Create plan
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'plan_name' => 'required|string',
+            'min_amount' => 'required|numeric',
+            'profit_percent' => 'required|numeric',
+            'duration' => 'required|numeric|min:1',
+            'selar_payment_link' => 'nullable|string',
+            'status' => 'required|string',
+        ]);
+
+        $validated['duration'] = (int) $validated['duration'];
+
+        $plan = InvestmentPlan::create($validated);
+
+        return response()->json([
+            'message' => 'Investment plan created successfully',
+            'data' => $plan
+        ], 201);
+    }
+
+
+    // Update plan
+    public function update(Request $request, $id)
+    {
+        $plan = InvestmentPlan::findOrFail($id);
+
+        $validated = $request->validate([
+            'plan_name' => 'required|string',
+            'min_amount' => 'required|numeric',
+            'profit_percent' => 'required|numeric',
+            'duration' => 'required|numeric|min:1',
+            'selar_payment_link' => 'nullable|string',
+            'status' => 'required|string',
+        ]);
+
+        $validated['duration'] = (int) $validated['duration'];
+
+        $plan->update($validated);
+
+        return response()->json([
+            'message' => 'Investment plan updated successfully',
+            'data' => $plan
+        ]);
+    }
+
+
+    // PROCESS EARNINGS EVERY 24 HOURS
+    public function processEarnings()
+    {
+        $user = Auth::user();
+
+        $investments = InvestmentPayment::where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->get();
+
+        foreach ($investments as $inv) {
+
+            $plan = InvestmentPlan::where('plan_name', $inv->plan_name)->first();
+
+            if (!$plan || $plan->status !== 'active') {
+                continue;
+            }
+
+            // Cast duration
+            $duration = (int) $inv->duration;
+            if ($duration <= 0) {
+                continue; // avoid division by zero
+            }
+
+            $now = Carbon::now();
+            $end = Carbon::parse($inv->end_date);
+
+            // Completed investment
+            if ($now->greaterThanOrEqualTo($end)) {
+                $inv->status = 'completed';
+                $inv->save();
+                continue;
+            }
+
+            // Check 24-hour rule
+            if ($inv->last_payout_at && Carbon::parse($inv->last_payout_at)->diffInHours($now) < 24) {
+                continue;
+            }
+
+            // Profit calculation
+            $totalReturn = $inv->amount + ($inv->amount * ($inv->profit_percent / 100));
+            $dailyProfit = $totalReturn / $duration;
+
+            if ($dailyProfit < 0) {
+                continue; // safety
+            }
+
+            // Credit the real USDT wallet — previously wrote to
+            // user.total_usdt / investment_balance, columns completely
+            // disconnected from the Wallet system every other balance
+            // in the app (Dashboard, Wallet page, Trading) reads from.
+            // Those profits were real money that would never have shown
+            // up anywhere a user could actually see it.
+            $wallet = \App\Models\Wallet::firstOrCreate(
+                ['user_id' => $user->id, 'symbol' => 'USDT', 'trading_mode' => 'crypto'],
+                ['coin' => 'USDT', 'address' => 'investment-earnings', 'balance' => 0]
+            );
+            $wallet->balance += $dailyProfit;
+            $wallet->save();
+
+            // Update investment
+            $inv->paid_out += $dailyProfit;
+            $inv->last_payout_at = $now;
+            $inv->save();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Earnings processed successfully (active plans only)'
+        ]);
+    }
+}
