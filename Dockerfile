@@ -1,7 +1,5 @@
-cat > Dockerfile << 'EOF'
 FROM php:8.2-cli
 
-# System deps + PHP extensions Laravel/Postgres/Sanctum/web-push need
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
@@ -13,7 +11,6 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo pdo_pgsql mbstring zip gd bcmath gmp \
     && rm -rf /var/lib/apt/lists/*
 
-# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
@@ -29,4 +26,3 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 10000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-EOF
