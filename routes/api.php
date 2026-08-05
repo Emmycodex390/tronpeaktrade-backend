@@ -118,7 +118,7 @@ Route::get('/ping', function () {
 // also returns each coin's real logo image URL (CoinGecko's own asset
 // CDN) alongside price/change — one request gets us both instead of
 // needing a second call or guessing at CDN URLs.
-
+Route::get('/ticker/crypto-batch', function (Request $request) {
     $ids = $request->query('ids', '');
     $ids = collect(explode(',', $ids))
         ->map(fn ($id) => trim($id))
