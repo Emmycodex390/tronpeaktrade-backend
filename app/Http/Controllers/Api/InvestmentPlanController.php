@@ -96,6 +96,12 @@ class InvestmentPlanController extends Controller
             'payment_method' => 'manual_deposit',
         ]);
 
+        \App\Services\PushService::notifyAdmins(
+            'Investment payment claimed',
+            "{$user->name} says they paid \${$request->amount} for {$plan->plan_name}. Check your payment account to confirm.",
+            "/admin/investments"
+        );
+
         return response()->json([
             'status' => 'success',
             'data' => $investment,

@@ -4,21 +4,30 @@ namespace App\Services;
 
 use App\Models\PushSubscription;
 use App\Models\User;
+use App\Notifications\AdminAlertNotification;
+use Illuminate\Support\Facades\Notification;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 
 class PushService
 {
     /**
-     * Sends a push notification to every admin's subscribed device(s).
-     * Silently drops any subscription that has expired or been revoked
-     * (the browser/OS returns 404/410 for those) — that's normal churn,
-     * not something to surface as an error.
+     * Sends a push notification to every admin's subscribed device(s),
+     * AND creates an in-app (database) notification for every admin
+     * regardless of whether they have push set up — that's what
+     * actually shows up in the admin notification bell. Previously
+     * this only did push, which meant admins without push configured
+     * (or who'd never granted permission) never saw these at all.
      */
     public static function notifyAdmins(string $title, string $body, ?string $url = null, array $extraData = []): void
     {
-        $adminIds = User::where('role', 'admin')->pluck('id');
-        $subscriptions = PushSubscription::whereIn('user_id', $adminIds)->get();
+        $admins = User::where('role', 'admin')->get();
+
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new AdminAlertNotification($title, $body, $url));
+        }
+
+        $subscriptions = PushSubscription::whereIn('user_id', $admins->pluck('id'))->get();
 
         if ($subscriptions->isEmpty()) {
             return;
@@ -65,10 +74,17 @@ class PushService
             );
         }
 
-        foreach ($webPush->flush() as $report) {
-            if (!$report->isSuccess() && $report->isSubscriptionExpired()) {
-                PushSubscription::where('endpoint', $report->getRequest()->getUri())->delete();
+        try {
+            foreach ($webPush->flush() as $report) {
+                if (!$report->isSuccess() && $report->isSubscriptionExpired()) {
+                    PushSubscription::where('endpoint', $report->getRequest()->getUri())->delete();
+                }
             }
+        } catch (\Exception $e) {
+            // Never let a push-delivery failure turn an already-saved
+            // chat message into an apparent error for the sender — the
+            // message itself succeeded well before this ever runs.
+            \Illuminate\Support\Facades\Log::warning('Push notification send failed', ['error' => $e->getMessage()]);
         }
     }
 }

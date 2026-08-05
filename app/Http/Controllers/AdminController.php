@@ -395,6 +395,18 @@ public function listInvestmentPayments()
         );
     }
 
+    // Staking has no admin approval step (balance is deducted instantly
+    // at subscribe time), so this is read-only — just visibility into
+    // what's out there, for support/stats purposes.
+    public function listUserStakes()
+    {
+        return response()->json(
+            \App\Models\UserStake::with(['user:id,name,email', 'plan'])
+                ->orderByDesc('created_at')
+                ->get()
+        );
+    }
+
     public function pendingInvestments()
     {
         return response()->json([
