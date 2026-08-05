@@ -96,8 +96,9 @@ class RegisteredUserController extends Controller
     }
 }
 
-        // ✅ Auto-login new user
-        Auth::login($user);
+        // ✅ Issue a Sanctum token instead of starting a session — auth
+        // is token-based now so it works across different domains.
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         \App\Services\PushService::notifyAdmins(
             'New user registered',
@@ -109,6 +110,7 @@ class RegisteredUserController extends Controller
         return response()->json([
             'message' => 'Registration successful',
             'user' => $user,
+            'token' => $token,
             'wallets' => $wallets,
             'wallet_errors' => $walletErrors,
         ], empty($walletErrors) ? 201 : 207); // 207 = Partial success

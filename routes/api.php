@@ -43,7 +43,46 @@ use App\Http\Controllers\{
     SettingsController
 };
 
+use App\Http\Controllers\Auth\{
+    RegisteredUserController,
+    AuthenticatedSessionController,
+    PasswordResetLinkController,
+    NewPasswordController,
+    EmailVerificationNotificationController,
+    VerifyEmailController
+};
+
+// ── Auth (token-based via Sanctum, not session/cookie) ──────────────
+// Moved off the web.php/auth.php stack on purpose. These used to run
+// under Laravel's default 'web' middleware group (session + CSRF
+// cookie check), which required the browser to store a first-party-
+// looking session cookie from a cross-domain API — something Chrome
+// and Firefox block by default in 2026 regardless of how correct the
+// CORS/cookie headers are. Token auth sidesteps that entirely: login/
+// register hand back a Bearer token, the frontend stores and sends it
+// on every request, no cookies involved.
+Route::post('/register', [RegisteredUserController::class, 'store'])
+    ->middleware('throttle:6,1');
+
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+    ->middleware('throttle:5,1');
+
+Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+    ->middleware('auth:sanctum');
+
+Route::post('/forgot-password', [PasswordResetLinkController::class, 'store']);
+Route::post('/reset-password', [NewPasswordController::class, 'store']);
+
+Route::get('/verify-email/{id}/{hash}', VerifyEmailController::class)
+    ->middleware(['auth:sanctum', 'signed', 'throttle:6,1'])
+    ->name('verification.verify');
+
+Route::post('/email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
+    ->middleware(['auth:sanctum', 'throttle:6,1']);
+
 use App\Models\{PushSubscription, Ticker};
+
+
 use App\Http\Controllers\Api\TransferController; 
 use App\Http\Controllers\Api\PositionController;
 

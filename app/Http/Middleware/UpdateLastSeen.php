@@ -9,7 +9,11 @@ class UpdateLastSeen
 {
     public function handle(Request $request, Closure $next)
     {
-        $user = $request->user();
+        // Explicit 'sanctum' guard — the default guard is still 'web'
+        // (session-based), which nothing populates anymore now that
+        // auth is token-based. $request->user() with no guard argument
+        // would silently always return null here otherwise.
+        $user = $request->user('sanctum');
 
         if ($user) {
             // Only write if it's been a while — avoids a DB write on

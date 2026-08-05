@@ -12,8 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // EnsureFrontendRequestsAreStateful removed on purpose — that's
+        // what made auth:sanctum accept cookie/session auth for "stateful"
+        // domains. We're on token auth now (Bearer tokens via
+        // createToken()), which doesn't need it and doesn't depend on
+        // cross-site cookies working at all.
         $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \App\Http\Middleware\UpdateLastSeen::class,
         ]);
 
