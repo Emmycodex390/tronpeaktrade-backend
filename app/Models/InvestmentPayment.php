@@ -29,6 +29,13 @@ class InvestmentPayment extends Model
     'start_date' => 'datetime',
     'end_date' => 'datetime',
     'last_payout_at' => 'datetime',
+    // Without these, Postgres/PDO returns decimal columns as strings in
+    // JSON responses (e.g. "10.00" instead of 10), which crashes any
+    // frontend code calling .toFixed() on them directly.
+    'amount' => 'float',
+    'profit_percent' => 'float',
+    'expected_profit' => 'float',
+    'paid_out' => 'float',
 ];
 
     public function user()
