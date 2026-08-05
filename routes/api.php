@@ -88,6 +88,24 @@ use App\Http\Controllers\Api\PositionController;
 
 
 
+// Keep-alive endpoint for external cron pings (e.g. cronjob.com). Does
+// a real DB query on purpose — Laravel's own /up health check doesn't
+// touch the database at all, so it keeps Render awake but does nothing
+// for Supabase, which pauses free-tier projects after 7 days of no
+// actual query activity (not just HTTP traffic). One ping here every
+// ~10 minutes covers both: beats Render's 15-min spin-down and counts
+// as real DB activity for Supabase.
+Route::get('/ping', function () {
+    $userCount = \Illuminate\Support\Facades\DB::table('users')->count();
+
+    return response()->json([
+        'status' => 'ok',
+        'time' => now()->toIso8601String(),
+        'db' => 'connected',
+        'users' => $userCount,
+    ]);
+});
+
 // Batch crypto ticker — fetches many coins in a single CoinGecko call
 // instead of the per-symbol route being hit N times in parallel. Added
 // because php artisan serve handles one request at a time; 15 parallel
@@ -100,7 +118,7 @@ use App\Http\Controllers\Api\PositionController;
 // also returns each coin's real logo image URL (CoinGecko's own asset
 // CDN) alongside price/change — one request gets us both instead of
 // needing a second call or guessing at CDN URLs.
-Route::get('/ticker/crypto-batch', function (Request $request) {
+
     $ids = $request->query('ids', '');
     $ids = collect(explode(',', $ids))
         ->map(fn ($id) => trim($id))
