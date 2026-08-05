@@ -211,10 +211,16 @@ Route::get('/coins/{id}', function ($id) {
             ];
 
             Cache::put($cacheKey, $result, 60);
+            Cache::put($cacheKey . '-stale', $result, 3600);
             return response()->json($result);
         }
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
+
+    $stale = Cache::get($cacheKey . '-stale');
+    if ($stale !== null) {
+        return response()->json($stale);
     }
 
     return response()->json(['error' => 'Coin data unavailable'], 503);
@@ -244,10 +250,16 @@ Route::get('/coins/{id}/chart', function (Request $request, $id) {
             ])->values();
 
             Cache::put($cacheKey, $prices, 60);
+            Cache::put($cacheKey . '-stale', $prices, 3600);
             return response()->json($prices);
         }
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
+
+    $stale = Cache::get($cacheKey . '-stale');
+    if ($stale !== null) {
+        return response()->json($stale);
     }
 
     return response()->json(['error' => 'Chart data unavailable'], 503);
