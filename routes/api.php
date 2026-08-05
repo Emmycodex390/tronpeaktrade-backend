@@ -788,6 +788,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/investments', [InvestmentPlanController::class, 'userInvestments']);
     Route::post('/investments', [InvestmentPlanController::class, 'createInvestment']);
     Route::post('/investments/mark-paid', [InvestmentPlanController::class, 'markPaidPending']);
+    Route::post('/investments/{id}/withdraw', [InvestmentPlanController::class, 'withdraw']);
 
 
     /*

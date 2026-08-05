@@ -282,6 +282,73 @@ class InvestmentPlanController extends Controller
     }
 
 
+    /**
+     * POST /api/investments/{id}/withdraw
+     *
+     * Cash out an investment's remaining value (principal + profit not
+     * yet paid via the daily drip) into any coin the user chooses —
+     * instant, no admin approval needed, unlike deposits. Works for
+     * 'active' investments (early exit — no penalty, just pays out
+     * whatever hasn't accrued yet based on real elapsed time) and
+     * 'completed' ones that still have an unpaid remainder (can happen
+     * if the daily drip didn't divide the term evenly).
+     */
+    public function withdraw(Request $request, $id)
+    {
+        $request->validate([
+            'coin' => 'required|string',
+        ]);
+
+        $user = Auth::user();
+        $investment = InvestmentPayment::where('user_id', $user->id)->findOrFail($id);
+
+        if (!in_array($investment->status, ['active', 'completed'])) {
+            return response()->json(['error' => 'This investment isn\'t withdrawable right now.'], 422);
+        }
+
+        $totalOwed = $investment->amount + $investment->expected_profit;
+        $remaining = max(0, $totalOwed - ($investment->paid_out ?? 0));
+
+        if ($remaining <= 0) {
+            return response()->json(['error' => 'Nothing left to withdraw from this investment.'], 422);
+        }
+
+        $coin = strtoupper($request->coin);
+        $coinAmount = \App\Services\PriceService::coinAmountForUsd($coin, (float) $remaining);
+
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            $wallet = \App\Models\Wallet::firstOrCreate(
+                ['user_id' => $user->id, 'symbol' => $coin, 'trading_mode' => 'crypto'],
+                ['coin' => $coin, 'address' => 'auto-created', 'balance' => 0]
+            );
+
+            $wallet->balance += $coinAmount;
+            $wallet->save();
+
+            $investment->paid_out = $totalOwed;
+            $investment->last_payout_at = now();
+            $investment->status = 'completed';
+            if (!$investment->end_date || now()->lessThan($investment->end_date)) {
+                $investment->end_date = now();
+            }
+            $investment->save();
+
+            \Illuminate\Support\Facades\DB::commit();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json(['error' => 'Withdrawal failed', 'message' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'coin' => $coin,
+            'amount_credited' => $coinAmount,
+            'usd_value' => $remaining,
+            'message' => "Withdrew \${$remaining} as {$coinAmount} {$coin}.",
+        ]);
+    }
+
     // PROCESS EARNINGS EVERY 24 HOURS
     public function processEarnings()
     {
