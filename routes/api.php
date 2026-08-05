@@ -105,10 +105,23 @@ Route::get('/ticker/crypto-batch', function (Request $request) {
     $ids = collect(explode(',', $ids))
         ->map(fn ($id) => trim($id))
         ->filter()
+        ->sort()
         ->implode(',');
 
     if (!$ids) {
         return response()->json(['error' => 'No ids provided'], 422);
+    }
+
+    // Cache per unique id-set for 30s — ticker prices don't need to be
+    // more real-time than that, and this is what actually fixes the
+    // CoinGecko 429s: Render's free-tier IPs are shared across many
+    // apps hammering CoinGecko's low, keyless rate limit, so caching
+    // cuts our call volume down drastically instead of hitting
+    // CoinGecko fresh on every single dashboard load/poll.
+    $cacheKey = 'crypto-batch-' . md5($ids);
+    $cached = Cache::get($cacheKey);
+    if ($cached !== null) {
+        return response()->json($cached);
     }
 
     try {
@@ -127,32 +140,38 @@ Route::get('/ticker/crypto-batch', function (Request $request) {
                     'usd' => $coin['current_price'],
                     'usd_24h_change' => $coin['price_change_percentage_24h'] ?? null,
                 ],
-            ]);
+            ])->toArray();
+
+            Cache::put($cacheKey, $result, 30);
+            Cache::put($cacheKey . '-stale', $result, 3600);
 
             return response()->json($result);
         }
 
-        // TEMPORARY: surface CoinGecko's actual response directly instead
-        // of a generic message — remove this branch once we've diagnosed
-        // why Render's calls are failing (likely CoinGecko rate-limiting
-        // or blocking Render's shared IP range, which normal residential
-        // connections wouldn't hit).
-        return response()->json([
-            'error' => 'CoinGecko request did not succeed',
-            'coingecko_status' => $cg->status(),
-            'coingecko_body' => $cg->body(),
-        ], 500);
+        \Illuminate\Support\Facades\Log::warning('CoinGecko crypto-batch non-success', [
+            'status' => $cg->status(),
+            'body' => $cg->body(),
+        ]);
+
+        // Serve a stale cached value if we have one rather than a hard
+        // error — better to show slightly-old prices than none at all
+        // when CoinGecko is rate-limiting us.
+        $stale = Cache::get($cacheKey . '-stale');
+        if ($stale !== null) {
+            return response()->json($stale);
+        }
+
+        return response()->json(['error' => 'Failed to fetch batch ticker data'], 500);
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
 
-        // TEMPORARY: same reasoning as above.
-        return response()->json([
-            'error' => 'Exception while calling CoinGecko',
-            'exception_message' => $e->getMessage(),
-        ], 500);
-    }
+        $stale = Cache::get($cacheKey . '-stale');
+        if ($stale !== null) {
+            return response()->json($stale);
+        }
 
-    return response()->json(['error' => 'Failed to fetch batch ticker data'], 500);
+        return response()->json(['error' => 'Failed to fetch batch ticker data'], 500);
+    }
 });
 
 // Full coin detail — real market cap, volume, circulating supply, and
