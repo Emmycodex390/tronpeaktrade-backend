@@ -47,6 +47,62 @@ class InvestmentPlanController extends Controller
     }
 
 
+    /**
+     * POST /api/investments/mark-paid
+     *
+     * For the "insufficient balance" fallback: user sees a deposit
+     * address, sends funds externally, then taps "I've paid" here.
+     * Creates a pending investment — no wallet is touched (nothing to
+     * deduct, since payment happened outside the app) — and it waits
+     * in the same admin queue as Selar-based investments until an
+     * admin confirms the deposit actually arrived and flips it active.
+     */
+    public function markPaidPending(Request $request)
+    {
+        $request->validate([
+            'plan_name' => 'required|string',
+            'amount' => 'required|numeric|min:1',
+        ]);
+
+        $user = Auth::user();
+
+        $plan = InvestmentPlan::where('plan_name', $request->plan_name)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$plan) {
+            return response()->json(['error' => 'Investment plan not found or inactive'], 404);
+        }
+
+        $duration = (int) $plan->duration;
+
+        if ($request->amount < $plan->min_amount) {
+            return response()->json([
+                'error' => "Minimum amount for {$plan->plan_name} is \${$plan->min_amount}"
+            ], 422);
+        }
+
+        $investment = InvestmentPayment::create([
+            'user_id' => $user->id,
+            'plan_name' => $plan->plan_name,
+            'amount' => $request->amount,
+            'profit_percent' => $plan->profit_percent,
+            'expected_profit' => ($request->amount * $plan->profit_percent / 100),
+            'duration' => $duration,
+            'status' => 'pending',
+            'start_date' => now(),
+            'end_date' => now()->addDays($duration),
+            'transaction_id' => 'TXN-' . Str::uuid(),
+            'payment_method' => 'manual_deposit',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $investment,
+            'message' => "We've recorded your investment — it activates once we confirm your deposit.",
+        ]);
+    }
+
     public function createInvestment(Request $request)
     {
         $request->validate([
@@ -123,11 +179,14 @@ class InvestmentPlanController extends Controller
         // user holds, converted at the live price).
         $coin = strtoupper($request->coin ?? 'USDT');
 
-        $wallet = \App\Models\Wallet::firstWhere([
-            ['user_id', $user->id],
-            ['symbol', $coin],
-            ['trading_mode', 'crypto'],
-        ]);
+        // firstOrCreate (not firstWhere) — a brand new user only gets
+        // BTC/ETH/SOL wallets at registration, never USDT, so picking
+        // USDT (the default payment coin) with zero prior activity
+        // would otherwise hit a genuinely-null wallet.
+        $wallet = \App\Models\Wallet::firstOrCreate(
+            ['user_id' => $user->id, 'symbol' => $coin, 'trading_mode' => 'crypto'],
+            ['coin' => $coin, 'address' => 'auto-created', 'balance' => 0]
+        );
 
         $requiredCoinAmount = \App\Services\PriceService::coinAmountForUsd($coin, (float) $request->amount);
         $available = $wallet->balance ?? 0;
@@ -154,7 +213,7 @@ class InvestmentPlanController extends Controller
                 'profit_percent' => $plan->profit_percent,
                 'expected_profit' => ($request->amount * $plan->profit_percent / 100),
                 'duration' => $duration,
-                'status' => 'pending', // stays pending until admin activates payout accrual, but funds are already collected
+                'status' => 'active', // balance payment is instant and needs no admin approval — this is what "activate automatically" means
                 'start_date' => now(),
                 'end_date' => now()->addDays($duration),
                 'transaction_id' => 'TXN-' . Str::uuid(),
@@ -229,7 +288,13 @@ class InvestmentPlanController extends Controller
         $user = Auth::user();
 
         $investments = InvestmentPayment::where('user_id', $user->id)
-            ->where('status', 'pending')
+            // 'active' = balance-paid (instant) or admin-confirmed Selar
+            // payments; 'pending' = still awaiting admin confirmation for
+            // a Selar payment. Only these two should actually accrue —
+            // completed/rejected/cancelled shouldn't. Previously this
+            // only checked 'pending', which meant an investment stopped
+            // earning the moment admin confirmed it as 'active'.
+            ->whereIn('status', ['pending', 'active'])
             ->get();
 
         foreach ($investments as $inv) {

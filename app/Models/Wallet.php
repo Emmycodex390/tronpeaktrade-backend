@@ -24,4 +24,14 @@ class Wallet extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    // Without this, Postgres/PDO returns these decimal columns as
+    // strings in JSON responses — harmless for code that just
+    // interpolates them into a string, but breaks anything that calls
+    // a Number method (.toFixed(), arithmetic) directly on the value.
+    protected $casts = [
+        'balance' => 'float',
+        'usd_value' => 'float',
+        'margin' => 'float',
+    ];
 }

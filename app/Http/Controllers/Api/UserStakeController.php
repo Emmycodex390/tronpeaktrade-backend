@@ -61,11 +61,10 @@ class UserStakeController extends Controller
         // coin) gets converted to the payment coin at the live price.
         $payCoin = strtoupper($request->pay_coin ?? $plan->coin);
 
-        $wallet = Wallet::firstWhere([
-            ['user_id', $request->user()->id],
-            ['symbol', $payCoin],
-            ['trading_mode', 'crypto'],
-        ]);
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $request->user()->id, 'symbol' => $payCoin, 'trading_mode' => 'crypto'],
+            ['coin' => $payCoin, 'address' => 'auto-created', 'balance' => 0]
+        );
 
         $requiredPayCoinAmount = $payCoin === strtoupper($plan->coin)
             ? (float) $data['amount']
