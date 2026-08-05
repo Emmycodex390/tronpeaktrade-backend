@@ -131,8 +131,25 @@ Route::get('/ticker/crypto-batch', function (Request $request) {
 
             return response()->json($result);
         }
+
+        // TEMPORARY: surface CoinGecko's actual response directly instead
+        // of a generic message — remove this branch once we've diagnosed
+        // why Render's calls are failing (likely CoinGecko rate-limiting
+        // or blocking Render's shared IP range, which normal residential
+        // connections wouldn't hit).
+        return response()->json([
+            'error' => 'CoinGecko request did not succeed',
+            'coingecko_status' => $cg->status(),
+            'coingecko_body' => $cg->body(),
+        ], 500);
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+
+        // TEMPORARY: same reasoning as above.
+        return response()->json([
+            'error' => 'Exception while calling CoinGecko',
+            'exception_message' => $e->getMessage(),
+        ], 500);
     }
 
     return response()->json(['error' => 'Failed to fetch batch ticker data'], 500);
