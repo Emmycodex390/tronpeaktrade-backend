@@ -30,10 +30,16 @@ class AppServiceProvider extends ServiceProvider
         Schema::defaultStringLength(191);
 
         /**
-         * Optional: Force older MySQL/MariaDB engines to use InnoDB
-         * (Some shared hosts default to MyISAM which breaks foreign keys)
+         * defaultMorphKeyType('uuid') removed — it was silently forcing
+         * every morphs() column (like personal_access_tokens.tokenable_id)
+         * to be a uuid column app-wide, even though no model here
+         * actually uses UUID primary keys (users.id and everything else
+         * is a normal bigint). That mismatch is what broke Sanctum token
+         * creation — inserting a real integer user id into a uuid
+         * column. Nothing in this app currently needs UUID morphs, so
+         * removing the override entirely rather than special-casing
+         * around it everywhere it'd bite next.
          */
-        Schema::defaultMorphKeyType('uuid'); // Optional: If you're using UUIDs.
 
         /**
          * Custom password reset URL
