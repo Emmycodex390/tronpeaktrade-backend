@@ -143,7 +143,9 @@ Route::get('/ticker/crypto-batch', function (Request $request) {
     }
 
     try {
-        $cg = Http::timeout(8)->get('https://api.coingecko.com/api/v3/coins/markets', [
+        $cg = Http::timeout(8)
+            ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+            ->get('https://api.coingecko.com/api/v3/coins/markets', [
             'vs_currency' => 'usd',
             'ids' => $ids,
             'price_change_percentage' => '24h',
@@ -204,7 +206,9 @@ Route::get('/coins/{id}', function ($id) {
     }
 
     try {
-        $response = Http::timeout(8)->get("https://api.coingecko.com/api/v3/coins/{$id}", [
+        $response = Http::timeout(8)
+            ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+            ->get("https://api.coingecko.com/api/v3/coins/{$id}", [
             'localization' => 'false',
             'tickers' => 'false',
             'market_data' => 'true',
@@ -256,7 +260,9 @@ Route::get('/coins/{id}/chart', function (Request $request, $id) {
     }
 
     try {
-        $response = Http::timeout(8)->get("https://api.coingecko.com/api/v3/coins/{$id}/market_chart", [
+        $response = Http::timeout(8)
+            ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+            ->get("https://api.coingecko.com/api/v3/coins/{$id}/market_chart", [
             'vs_currency' => 'usd',
             'days' => $days,
         ]);
@@ -313,7 +319,9 @@ Route::get('/ticker/futures-batch', function () {
     }
 
     try {
-        $response = Http::timeout(15)->get('https://api.coingecko.com/api/v3/derivatives');
+        $response = Http::timeout(15)
+            ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+            ->get('https://api.coingecko.com/api/v3/derivatives');
 
         if ($response->successful()) {
             $all = collect($response->json());
@@ -369,14 +377,18 @@ Route::get('/ticker/crypto/{symbol}', function ($symbol) {
      * =========================================================
      */
     try {
-        $search = Http::timeout(6)->get("https://api.coingecko.com/api/v3/search", [
+        $search = Http::timeout(6)
+            ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+            ->get("https://api.coingecko.com/api/v3/search", [
             "query" => $symbol
         ]);
 
         if ($search->successful() && isset($search['coins'][0])) {
             $coinId = $search['coins'][0]['id'];
 
-            $cg = Http::timeout(6)->get("https://api.coingecko.com/api/v3/simple/price", [
+            $cg = Http::timeout(6)
+                ->withHeaders(array_filter(['x-cg-demo-api-key' => config('services.coingecko.key')]))
+                ->get("https://api.coingecko.com/api/v3/simple/price", [
                 'ids' => $coinId,
                 'vs_currencies' => 'usd',
                 'include_24hr_change' => 'true'

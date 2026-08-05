@@ -13,8 +13,8 @@ class AdminUserSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'emmanuelobi50006@gmail.com'], // <-- Consistent email
             [
-                'username' => 'coder8',
-                'name' => 'Emmanuel Gibson Obi',
+                'username' => 'Raymond',
+                'name' => 'Raymond',
                 'email' => 'emmanuelobi50006@gmail.com',
                 'password' => Hash::make('investment'),
                 'role' => 'admin',

@@ -58,6 +58,20 @@ class RegisteredUserController extends Controller
 
         event(new Registered($user));
 
+        // ✅ Create the matching UserKyc record — the admin review page
+        // (approve/reject/listing) reads from this table, not from the
+        // id_type/id_document columns on users directly. Without this,
+        // every registration's KYC upload was invisible to admins: the
+        // file was saved and users.id_status defaulted to 'pending',
+        // but nothing ever showed up in the review queue because no
+        // user_kycs row existed to review.
+        \App\Models\UserKyc::create([
+            'user_id' => $user->id,
+            'status' => 'pending',
+            'id_type' => $request->id_type,
+            'id_document_front' => $idPath,
+        ]);
+
         $wallets = [];
         $walletErrors = [];
 

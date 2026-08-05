@@ -9,12 +9,12 @@ class KYCController extends Controller
 {
     public function list()
     {
-        return response()->json(UserKYC::with('user')->get());
+        return response()->json(UserKyc::with('user')->get());
     }
 
     public function approve($id)
     {
-        $kyc = UserKYC::findOrFail($id);
+        $kyc = UserKyc::findOrFail($id);
         $kyc->status = 'approved';
         $kyc->save();
         return response()->json($kyc);
@@ -22,7 +22,7 @@ class KYCController extends Controller
 
     public function reject($id)
     {
-        $kyc = UserKYC::findOrFail($id);
+        $kyc = UserKyc::findOrFail($id);
         $kyc->status = 'rejected';
         $kyc->save();
         return response()->json($kyc);

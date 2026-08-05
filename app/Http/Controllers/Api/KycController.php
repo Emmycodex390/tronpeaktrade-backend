@@ -35,7 +35,7 @@ class KycController extends Controller
         $selfiePath = $request->file('selfie')->store($folder, 'public');
 
         // Create or update KYC record
-        $kyc = UserKYC::updateOrCreate(
+        $kyc = UserKyc::updateOrCreate(
             ['user_id' => $user->id],
             [
                 'id_type' => $request->id_type,
@@ -116,7 +116,7 @@ class KycController extends Controller
     {
         $user = Auth::user();
 
-        $kyc = UserKYC::where('user_id', $user->id)->first();
+        $kyc = UserKyc::where('user_id', $user->id)->first();
 
         if (!$kyc) {
             return response()->json([

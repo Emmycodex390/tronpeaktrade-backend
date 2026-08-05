@@ -48,4 +48,14 @@ return [
         'subject' => env('VAPID_SUBJECT', 'mailto:support@fexistrade.com'),
     ],
 
+    // Free CoinGecko "Demo" plan API key. Not required for the keyless
+    // public API to work at all, but the keyless tier shares its rate
+    // limit across every app hitting it from the same IP range —
+    // painful on shared hosts like Render's free tier. A Demo key gets
+    // its own per-key limit instead. Sign up free at
+    // https://www.coingecko.com/en/api/pricing (Demo plan).
+    'coingecko' => [
+        'key' => env('COINGECKO_API_KEY'),
+    ],
+
 ];
