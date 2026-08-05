@@ -38,6 +38,7 @@ class UserStakeController extends Controller
         $data = $request->validate([
             'staking_plan_id' => 'required|exists:staking_plans,id',
             'amount' => 'required|numeric|min:0.00000001',
+            'pay_coin' => 'nullable|string',
         ]);
 
         $plan = StakingPlan::findOrFail($data['staking_plan_id']);
@@ -54,19 +55,40 @@ class UserStakeController extends Controller
             return response()->json(['error' => "Maximum stake for this plan is {$plan->max_amount} {$plan->coin}"], 422);
         }
 
+        // Which coin's wallet actually gets debited — defaults to the
+        // plan's own coin (old behavior), but a user can pay with any
+        // coin they hold a balance in; the amount (given in the plan's
+        // coin) gets converted to the payment coin at the live price.
+        $payCoin = strtoupper($request->pay_coin ?? $plan->coin);
+
         $wallet = Wallet::firstWhere([
             ['user_id', $request->user()->id],
-            ['symbol', $plan->coin],
+            ['symbol', $payCoin],
             ['trading_mode', 'crypto'],
         ]);
 
-        if (!$wallet || $wallet->balance < $data['amount']) {
-            return response()->json(['error' => "Insufficient {$plan->coin} balance"], 400);
+        $requiredPayCoinAmount = $payCoin === strtoupper($plan->coin)
+            ? (float) $data['amount']
+            : \App\Services\PriceService::coinAmountForUsd(
+                $payCoin,
+                \App\Services\PriceService::usdValueOf($plan->coin, (float) $data['amount'])
+            );
+
+        $available = $wallet->balance ?? 0;
+
+        if (!$wallet || $available < $requiredPayCoinAmount) {
+            return response()->json([
+                'error' => 'insufficient_balance',
+                'message' => "Insufficient {$payCoin} balance to fund this stake.",
+                'coin' => $payCoin,
+                'required' => $requiredPayCoinAmount,
+                'available' => $available,
+            ], 422);
         }
 
         DB::beginTransaction();
         try {
-            $wallet->balance -= $data['amount'];
+            $wallet->balance -= $requiredPayCoinAmount;
             $wallet->save();
 
             $stake = UserStake::create([

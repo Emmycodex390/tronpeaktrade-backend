@@ -52,6 +52,7 @@ class InvestmentPlanController extends Controller
         $request->validate([
             'plan_name' => 'required|string',
             'amount' => 'required|numeric|min:1',
+            'coin' => 'nullable|string',
         ]);
 
         $user = Auth::user();
@@ -79,44 +80,100 @@ class InvestmentPlanController extends Controller
             ], 422);
         }
 
-        // Selar link
-        if (!$plan->selar_payment_link) {
-            return response()->json(['error' => 'Payment isn\'t set up for this plan yet. Contact support.'], 422);
+        // ── Payment priority: Selar first if this plan has a real link
+        // configured, balance as the automatic fallback otherwise. Not
+        // something the user chooses — determined purely by whether an
+        // admin has actually set up Selar for this specific plan.
+        if ($plan->selar_payment_link) {
+            $selarLink = $plan->selar_payment_link
+                . '?amount=' . $request->amount
+                . '&user_id=' . $user->id
+                . '&plan=' . urlencode($plan->plan_name);
+
+            $investment = InvestmentPayment::create([
+                'user_id' => $user->id,
+                'plan_name' => $plan->plan_name,
+                'amount' => $request->amount,
+                'profit_percent' => $plan->profit_percent,
+                'expected_profit' => ($request->amount * $plan->profit_percent / 100),
+                'duration' => $duration,
+                'status' => 'pending',
+                'start_date' => now(),
+                'end_date' => now()->addDays($duration),
+                'transaction_id' => 'TXN-' . Str::uuid(),
+                'selar_payment_link' => $selarLink,
+                'payment_method' => 'selar',
+            ]);
+
+            // Process earnings ONLY if plan is active
+            if ($plan->status === 'active') {
+                $this->processEarnings();
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $investment,
+                'payment_url' => $selarLink,
+                'message' => 'Investment created successfully. Continue to payment...',
+            ]);
         }
 
-        $selarLink = $plan->selar_payment_link
-            . '?amount=' . $request->amount
-            . '&user_id=' . $user->id
-            . '&plan=' . urlencode($plan->plan_name);
+        // ── No Selar link configured — pay with existing wallet
+        // balance instead, in whichever coin was chosen (any coin the
+        // user holds, converted at the live price).
+        $coin = strtoupper($request->coin ?? 'USDT');
 
-        // Create investment safely
-        $investment = InvestmentPayment::create([
-            'user_id' => $user->id,
-            'plan_name' => $plan->plan_name,
-            'amount' => $request->amount,
-            'profit_percent' => $plan->profit_percent,
-            'expected_profit' => ($request->amount * $plan->profit_percent / 100),
-            'duration' => $duration,
-            'status' => 'pending',
-            'start_date' => now(),
-            'end_date' => now()->addDays($duration),
-            'transaction_id' => 'TXN-' . Str::uuid(),
-            'selar_payment_link' => $selarLink,
+        $wallet = \App\Models\Wallet::firstWhere([
+            ['user_id', $user->id],
+            ['symbol', $coin],
+            ['trading_mode', 'crypto'],
         ]);
 
-        // Process earnings ONLY if plan is active
-        if ($plan->status === 'active') {
-            $this->processEarnings();
+        $requiredCoinAmount = \App\Services\PriceService::coinAmountForUsd($coin, (float) $request->amount);
+        $available = $wallet->balance ?? 0;
+
+        if (!$wallet || $available < $requiredCoinAmount) {
+            return response()->json([
+                'error' => 'insufficient_balance',
+                'message' => "Insufficient {$coin} balance to fund this investment.",
+                'coin' => $coin,
+                'required' => $requiredCoinAmount,
+                'available' => $available,
+            ], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            $wallet->balance -= $requiredCoinAmount;
+            $wallet->save();
+
+            $investment = InvestmentPayment::create([
+                'user_id' => $user->id,
+                'plan_name' => $plan->plan_name,
+                'amount' => $request->amount,
+                'profit_percent' => $plan->profit_percent,
+                'expected_profit' => ($request->amount * $plan->profit_percent / 100),
+                'duration' => $duration,
+                'status' => 'pending', // stays pending until admin activates payout accrual, but funds are already collected
+                'start_date' => now(),
+                'end_date' => now()->addDays($duration),
+                'transaction_id' => 'TXN-' . Str::uuid(),
+                'payment_method' => 'balance',
+                'payment_coin' => $coin,
+            ]);
+
+            \Illuminate\Support\Facades\DB::commit();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json(['error' => 'Failed to process investment', 'message' => $e->getMessage()], 500);
         }
 
         return response()->json([
             'status' => 'success',
             'data' => $investment,
-            'payment_url' => $selarLink,
-            'message' => 'Investment created successfully. Continue to payment...',
+            'message' => 'Investment funded from your balance and is now active.',
         ]);
     }
-
 
     // Create plan
     public function store(Request $request)

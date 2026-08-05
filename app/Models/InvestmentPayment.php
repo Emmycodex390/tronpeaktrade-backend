@@ -21,6 +21,8 @@ class InvestmentPayment extends Model
         'end_date',
         'transaction_id',
         'selar_payment_link', // ✅ NEW FIELD
+        'payment_method',
+        'payment_coin',
     ];  
     
     protected $casts = [
