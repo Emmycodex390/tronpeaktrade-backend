@@ -131,7 +131,9 @@ Route::get('/ticker/crypto-batch', function (Request $request) {
 
             return response()->json($result);
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json(['error' => 'Failed to fetch batch ticker data'], 500);
 });
@@ -175,7 +177,9 @@ Route::get('/coins/{id}', function ($id) {
             Cache::put($cacheKey, $result, 60);
             return response()->json($result);
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json(['error' => 'Coin data unavailable'], 503);
 });
@@ -206,7 +210,9 @@ Route::get('/coins/{id}/chart', function (Request $request, $id) {
             Cache::put($cacheKey, $prices, 60);
             return response()->json($prices);
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json(['error' => 'Chart data unavailable'], 503);
 });
@@ -274,7 +280,9 @@ Route::get('/ticker/futures-batch', function () {
 
             return response()->json($results);
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json(['error' => 'Futures data unavailable'], 503);
 });
@@ -317,7 +325,9 @@ Route::get('/ticker/crypto/{symbol}', function ($symbol) {
                 ];
             }
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     /**
      * =========================================================
@@ -339,7 +349,9 @@ Route::get('/ticker/crypto/{symbol}', function ($symbol) {
                 "source" => "binance"
             ];
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json([
         "error" => "Failed to automatically fetch ticker data for symbol: $symbol",
@@ -364,7 +376,9 @@ Route::get('/ticker/{symbol}', function ($symbol) {
         if ($response->successful()) {
             return $response->json();
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     // A connection-level failure (network unreachable, DNS, timeout)
     // throws instead of returning a failed Response, so it's caught
@@ -394,7 +408,9 @@ Route::get('/ticker/futures/{symbol}', function ($symbol) {
                 'percent_change_24h' => $data['priceChangePercent'],
             ];
         }
-    } catch (\Exception $e) {}
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('External API call failed', ['message' => $e->getMessage()]);
+    }
 
     return response()->json(['status' => 'error', 'message' => 'Futures asset unavailable'], 503);
 });
