@@ -444,6 +444,53 @@ public function listInvestmentPayments()
         ]);
     }
 
+    /**
+     * Adjust a specific investment's profit up or down — for when
+     * something needs manual correction (a technical issue, a
+     * goodwill gesture, etc). Sets expected_profit directly, which is
+     * what drives the daily accrual rate going forward
+     * ((amount+expected_profit)/duration) — so this changes future
+     * payouts, not just a cosmetic number.
+     */
+    public function adjustInvestmentProfit(Request $request, $id)
+    {
+        $request->validate([
+            'expected_profit' => 'required|numeric|min:0',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $inv = InvestmentPayment::findOrFail($id);
+        $inv->expected_profit = $request->expected_profit;
+        if ($request->filled('reason')) {
+            $inv->admin_note = $request->reason;
+        }
+        $inv->save();
+
+        return response()->json(['success' => true, 'message' => 'Profit adjusted.', 'data' => $inv]);
+    }
+
+    /**
+     * Same idea for staking — adjusts the APY a specific stake earns
+     * at, since staking rewards are computed live from apy rather than
+     * a stored profit figure.
+     */
+    public function adjustStakeApy(Request $request, $id)
+    {
+        $request->validate([
+            'apy' => 'required|numeric|min:0',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $stake = \App\Models\UserStake::findOrFail($id);
+        $stake->apy = $request->apy;
+        if ($request->filled('reason')) {
+            $stake->admin_note = $request->reason;
+        }
+        $stake->save();
+
+        return response()->json(['success' => true, 'message' => 'APY adjusted.', 'data' => $stake]);
+    }
+
     public function createInvestmentPayment(Request $request)
     {
         $request->validate([

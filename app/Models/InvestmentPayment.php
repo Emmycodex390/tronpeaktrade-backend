@@ -23,6 +23,7 @@ class InvestmentPayment extends Model
         'selar_payment_link', // ✅ NEW FIELD
         'payment_method',
         'payment_coin',
+        'admin_note',
     ];  
     
     protected $casts = [

@@ -954,6 +954,8 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function ()
 Route::get('investments/pending', [AdminController::class, 'pendingInvestments']);
 Route::get('user-stakes', [AdminController::class, 'listUserStakes']);
 Route::post('investments/{id}/status', [AdminController::class, 'updateStatus']);
+Route::post('investments/{id}/adjust-profit', [AdminController::class, 'adjustInvestmentProfit']);
+Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStakeApy']);
     Route::get('investments', [AdminController::class, 'listInvestmentPayments']);
     Route::get('investments/{id}', [AdminController::class, 'getInvestmentPayment']);
     Route::put('investments/{id}', [AdminController::class, 'updateInvestmentPayment']);

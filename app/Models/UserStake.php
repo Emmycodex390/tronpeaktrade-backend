@@ -18,6 +18,7 @@ class UserStake extends Model
         'ends_at',
         'last_claimed_at',
         'status',
+        'admin_note',
     ];
 
     protected $casts = [
