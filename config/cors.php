@@ -28,8 +28,8 @@ return [
 
     'allowed_origins' => [
         env('FRONTEND_URL', env('APP_URL')),
-        'https://fexistrade.org',
-        'https://www.fexistrade.org',
+        'https://tronpeaktrade.org',
+        'https://www.tronpeaktrade.org',
         'http://localhost:5173',
         'http://localhost:3000',
         'http://localhost:8000',
