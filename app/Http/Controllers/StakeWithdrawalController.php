@@ -40,6 +40,8 @@ class StakeWithdrawalController extends Controller
                     'verifications' => $stake->withdrawalVerifications->map(fn ($v) => [
                         'id' => $v->id,
                         'label' => $v->label,
+                        'message' => $v->message,
+                        'code' => $v->verified_at ? null : $v->code,
                         'sent_at' => $v->sent_at,
                         'verified_at' => $v->verified_at,
                     ]),
@@ -57,6 +59,7 @@ class StakeWithdrawalController extends Controller
     {
         $request->validate([
             'label' => 'required|string|min:2|max:120',
+            'message' => 'nullable|string|max:1000',
         ]);
 
         $stake = UserStake::with('user')->findOrFail($id);
@@ -69,6 +72,7 @@ class StakeWithdrawalController extends Controller
             'user_stake_id' => $stake->id,
             'created_by' => Auth::id(),
             'label' => $request->label,
+            'message' => $request->message,
             'code' => (string) random_int(100000, 999999),
             'sent_at' => now(),
         ]);

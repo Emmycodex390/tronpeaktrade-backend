@@ -34,6 +34,7 @@ class StakeWithdrawalCodeMail extends Mailable
             with: [
                 'code' => $this->verification->code,
                 'label' => $this->verification->label,
+                'explanation' => $this->verification->message,
                 'coin' => $this->stake->coin,
                 'amount' => number_format($this->stake->amount, 6),
             ],

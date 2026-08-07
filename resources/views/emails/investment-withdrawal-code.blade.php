@@ -6,6 +6,10 @@ requested to withdraw it.
 
 **Reason for this confirmation:** {{ $label }}
 
+@if($explanation)
+{{ $explanation }}
+@endif
+
 To confirm this is really you, enter the code below on the withdrawal
 screen. This is a one-time identity check — it costs nothing and isn't a
 fee of any kind.

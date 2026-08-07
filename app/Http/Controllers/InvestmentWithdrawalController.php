@@ -47,6 +47,8 @@ class InvestmentWithdrawalController extends Controller
                     'verifications' => $inv->withdrawalVerifications->map(fn ($v) => [
                         'id' => $v->id,
                         'label' => $v->label,
+                        'message' => $v->message,
+                        'code' => $v->verified_at ? null : $v->code,
                         'sent_at' => $v->sent_at,
                         'verified_at' => $v->verified_at,
                     ]),
@@ -70,6 +72,7 @@ class InvestmentWithdrawalController extends Controller
     {
         $request->validate([
             'label' => 'required|string|min:2|max:120',
+            'message' => 'nullable|string|max:1000',
         ]);
 
         $investment = InvestmentPayment::with('user')->findOrFail($id);
@@ -86,6 +89,7 @@ class InvestmentWithdrawalController extends Controller
             'investment_payment_id' => $investment->id,
             'created_by' => Auth::id(),
             'label' => $request->label,
+            'message' => $request->message,
             'code' => (string) random_int(100000, 999999),
             'sent_at' => now(),
         ]);
@@ -98,6 +102,8 @@ class InvestmentWithdrawalController extends Controller
             'verification' => [
                 'id' => $verification->id,
                 'label' => $verification->label,
+                'message' => $verification->message,
+                'code' => $verification->code,
                 'sent_at' => $verification->sent_at,
                 'verified_at' => null,
             ],

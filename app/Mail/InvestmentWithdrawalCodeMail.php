@@ -34,6 +34,7 @@ class InvestmentWithdrawalCodeMail extends Mailable
             with: [
                 'code' => $this->verification->code,
                 'label' => $this->verification->label,
+                'explanation' => $this->verification->message,
                 'planName' => $this->investment->plan_name,
                 'amount' => number_format($this->investment->amount + $this->investment->expected_profit, 2),
             ],

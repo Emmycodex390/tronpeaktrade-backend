@@ -18,6 +18,7 @@ class StakeWithdrawalVerification extends Model
         'user_stake_id',
         'created_by',
         'label',
+        'message',
         'code',
         'sent_at',
         'verified_at',

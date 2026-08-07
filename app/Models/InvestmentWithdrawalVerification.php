@@ -18,6 +18,7 @@ class InvestmentWithdrawalVerification extends Model
         'investment_payment_id',
         'created_by',
         'label',
+        'message',
         'code',
         'sent_at',
         'verified_at',
