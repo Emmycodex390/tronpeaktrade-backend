@@ -40,7 +40,9 @@ use App\Http\Controllers\{
     DepositAddressController,
     AdminAPIController,
     SecurityController,
-    SettingsController
+    SettingsController,
+    InvestmentWithdrawalController,
+    StakeWithdrawalController
 };
 
 use App\Http\Controllers\Auth\{
@@ -962,6 +964,23 @@ Route::get('user-stakes', [AdminController::class, 'listUserStakes']);
 Route::post('investments/{id}/status', [AdminController::class, 'updateStatus']);
 Route::post('investments/{id}/adjust-profit', [AdminController::class, 'adjustInvestmentProfit']);
 Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStakeApy']);
+
+    // Matured-withdrawal verification routes — registered here, ABOVE
+    // the investments/{id} wildcard below, and WITHOUT a leading
+    // "/admin/" or "admin/" prefix, since this whole group already runs
+    // under Route::prefix('admin'). Adding "admin/" again here would
+    // register these at /admin/admin/... (unreachable) instead of
+    // /admin/... (correct) — that was the original bug.
+    Route::get('investments/matured', [InvestmentWithdrawalController::class, 'matured']);
+    Route::post('investments/{id}/verifications', [InvestmentWithdrawalController::class, 'store']);
+    Route::post('investment-verifications/{id}/resend', [InvestmentWithdrawalController::class, 'resend']);
+    Route::delete('investment-verifications/{id}', [InvestmentWithdrawalController::class, 'destroy']);
+
+    Route::get('stakes/matured', [StakeWithdrawalController::class, 'matured']);
+    Route::post('stakes/{id}/verifications', [StakeWithdrawalController::class, 'store']);
+    Route::post('stake-verifications/{id}/resend', [StakeWithdrawalController::class, 'resend']);
+    Route::delete('stake-verifications/{id}', [StakeWithdrawalController::class, 'destroy']);
+
     Route::get('investments', [AdminController::class, 'listInvestmentPayments']);
     Route::get('investments/{id}', [AdminController::class, 'getInvestmentPayment']);
     Route::put('investments/{id}', [AdminController::class, 'updateInvestmentPayment']);
@@ -1024,9 +1043,9 @@ Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStake
     | Withdrawals
     |--------------------------------------------------------------------------
     */
-    Route::get('withdrawals', [App\Http\Controllers\WithdrawalController::class, 'list']);
-    Route::put('withdrawals/{id}/approve', [App\Http\Controllers\WithdrawalController::class, 'approve']);
-    Route::put('withdrawals/{id}/reject', [App\Http\Controllers\WithdrawalController::class, 'reject']);
+    Route::get('withdrawals', [App\Http\Controllers\Api\WithdrawalController::class, 'list']);
+    Route::put('withdrawals/{id}/approve', [App\Http\Controllers\Api\WithdrawalController::class, 'approve']);
+    Route::put('withdrawals/{id}/reject', [App\Http\Controllers\Api\WithdrawalController::class, 'reject']);
 
     
    
@@ -1075,20 +1094,6 @@ Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStake
     */
     Route::get('settings', [SettingsController::class, 'view']);
     Route::put('settings', [SettingsController::class, 'update']);   
-    
-      
-      
-      Route::get('/admin/investments/matured', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'matured']);
-      Route::post('/admin/investments/{id}/verifications', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'store']);
-      Route::post('/admin/investment-verifications/{id}/resend', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'resend']);
-      Route::delete('/admin/investment-verifications/{id}', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'destroy']); 
-      
-      
-      Route::get('/admin/stakes/matured', [StakeWithdrawalController::class, 'matured']);
-      Route::post('/admin/stakes/{id}/verifications', [StakeWithdrawalController::class, 'store']);
-      Route::post('/admin/stake-verifications/{id}/resend', [StakeWithdrawalController::class, 'resend']);
-      Route::delete('/admin/stake-verifications/{id}', [StakeWithdrawalController::class, 'destroy']);
-      
     
     // ADMIN VERIFICATION CODE ROUTES
     Route::get('verification-codes', [AdminController::class, 'listVerificationCodes']);
