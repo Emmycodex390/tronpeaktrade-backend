@@ -34,4 +34,9 @@ class UserStake extends Model
     {
         return $this->belongsTo(StakingPlan::class, 'staking_plan_id');
     }
+
+    public function withdrawalVerifications()
+    {
+        return $this->hasMany(StakeWithdrawalVerification::class);
+    }
 }
