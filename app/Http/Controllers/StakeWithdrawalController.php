@@ -56,7 +56,7 @@ class StakeWithdrawalController extends Controller
     public function store(Request $request, $id)
     {
         $request->validate([
-            'label' => 'nullable|string|max:120',
+            'label' => 'required|string|min:2|max:120',
         ]);
 
         $stake = UserStake::with('user')->findOrFail($id);
