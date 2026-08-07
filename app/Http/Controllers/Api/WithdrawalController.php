@@ -50,13 +50,6 @@ class WithdrawalController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasCompletedAllVerifications()) {
-            return response()->json([
-                'requires_verification' => true,
-                'error' => 'You must complete all verification requirements before withdrawing.',
-            ], 403);
-        }
-
         $data = $request->validate([
             'bank_name'      => 'required|string',
             'account_number' => 'required|string',
@@ -115,13 +108,6 @@ class WithdrawalController extends Controller
     public function crypto(Request $request)
     {
         $user = $request->user();
-
-        if (! $user->hasCompletedAllVerifications()) {
-            return response()->json([
-                'requires_verification' => true,
-                'error' => 'You must complete all verification requirements before withdrawing.',
-            ], 403);
-        }
 
         $data = $request->validate([
             'address' => 'required|string',

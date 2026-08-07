@@ -39,6 +39,11 @@ class InvestmentPayment extends Model
     'paid_out' => 'float',
 ];
 
+    public function withdrawalVerifications()
+    {
+        return $this->hasMany(InvestmentWithdrawalVerification::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

@@ -776,7 +776,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/ai-investments', [AiInvestmentController::class, 'index']);
     Route::post('/ai-investments', [AiInvestmentController::class, 'store']);
-    Route::post('/ai-investments/{id}/complete', [AiInvestmentController::class, 'complete']);
+    Route::post('/ai-investments/{id}/complete', [AiInvestmentController::class, 'complete']); 
+    
+    Route::post('/investments/{id}/verify-withdrawal-code', [InvestmentPlanController::class, 'verifyWithdrawalCode']);
+
 
     Route::get('/investment-payments', [InvestmentPaymentController::class, 'index']);
     Route::post('/investment-payments', [InvestmentPaymentController::class, 'store']);
@@ -1070,7 +1073,13 @@ Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStake
     Route::get('settings', [SettingsController::class, 'view']);
     Route::put('settings', [SettingsController::class, 'update']);   
     
-    
+      
+      
+      Route::get('/admin/investments/matured', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'matured']);
+      Route::post('/admin/investments/{id}/verifications', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'store']);
+      Route::post('/admin/investment-verifications/{id}/resend', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'resend']);
+      Route::delete('/admin/investment-verifications/{id}', [\App\Http\Controllers\Admin\InvestmentWithdrawalController::class, 'destroy']);
+      
     
     // ADMIN VERIFICATION CODE ROUTES
     Route::get('verification-codes', [AdminController::class, 'listVerificationCodes']);
