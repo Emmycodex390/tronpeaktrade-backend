@@ -36,6 +36,10 @@ class Withdrawal extends Model
 
         // extra message/notes
         'note',
+
+        // admin's reason when rejecting — added alongside the admin
+        // withdrawal-approval controller.
+        'admin_note',
     ];
 
     public function user()

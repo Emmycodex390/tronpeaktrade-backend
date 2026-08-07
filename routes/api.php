@@ -1043,9 +1043,9 @@ Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStake
     | Withdrawals
     |--------------------------------------------------------------------------
     */
-    Route::get('withdrawals', [App\Http\Controllers\Api\WithdrawalController::class, 'list']);
-    Route::put('withdrawals/{id}/approve', [App\Http\Controllers\Api\WithdrawalController::class, 'approve']);
-    Route::put('withdrawals/{id}/reject', [App\Http\Controllers\Api\WithdrawalController::class, 'reject']);
+    Route::get('withdrawals', [App\Http\Controllers\WithdrawalController::class, 'list']);
+    Route::put('withdrawals/{id}/approve', [App\Http\Controllers\WithdrawalController::class, 'approve']);
+    Route::put('withdrawals/{id}/reject', [App\Http\Controllers\WithdrawalController::class, 'reject']);
 
     
    
