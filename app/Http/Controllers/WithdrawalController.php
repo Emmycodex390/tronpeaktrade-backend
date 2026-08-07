@@ -34,7 +34,7 @@ class WithdrawalController extends Controller
             $query->where('status', $request->status);
         }
 
-        return response()->json(['data' => $query->get()]);
+        return response()->json($query->get());
     }
 
     /**
