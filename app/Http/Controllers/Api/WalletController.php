@@ -22,14 +22,31 @@ class WalletController extends Controller
             'status' => 'success',
             'data' => [
                 'wallets' => $wallets->map(function ($wallet) {
+                    $balance = (float) $wallet->balance;
+
+                    // Computed live from the actual balance every time,
+                    // rather than trusting the stored usd_value column —
+                    // that column only gets updated by a separate manual
+                    // admin "recalculate" action, so it silently drifts
+                    // stale after any deposit, trade, investment, or
+                    // stake action changes the balance without touching
+                    // it. Falls back to the stored value only if a live
+                    // price lookup genuinely fails, so this never shows
+                    // $0 outright on a temporary price-service hiccup.
+                    try {
+                        $usdValue = \App\Services\PriceService::usdValueOf($wallet->symbol, $balance);
+                    } catch (\Throwable $e) {
+                        $usdValue = (float) ($wallet->usd_value ?? 0);
+                    }
+
                     return [
                         'id'        => $wallet->id,
                         'name'      => $wallet->name ?? $wallet->symbol,
                         'symbol'    => strtoupper($wallet->symbol),
                         'network'   => $wallet->network,
                         'address'   => $wallet->address,
-                        'balance'   => (float) $wallet->balance,
-                        'usd_value' => (float) ($wallet->usd_value ?? 0),
+                        'balance'   => $balance,
+                        'usd_value' => (float) $usdValue,
                         'trading_mode' => $wallet->trading_mode,
                         'margin'    => (float) $wallet->margin,
                         'leverage'  => (int) ($wallet->leverage ?? 1),
