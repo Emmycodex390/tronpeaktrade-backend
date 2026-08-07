@@ -354,10 +354,13 @@ class InvestmentPlanController extends Controller
             // fall through to actually process the withdrawal below.
         } else {
             $sentCount = $pending->whereNotNull('sent_at')->count();
+            $active = $pending->first();
             return response()->json([
                 'requires_code' => true,
                 'code_sent' => $sentCount > 0,
                 'remaining' => $pending->count(),
+                'title' => $active->label,
+                'explanation' => $active->message,
                 'error' => $sentCount > 0
                     ? 'Enter the confirmation code we emailed you to continue.'
                     : 'This withdrawal is awaiting confirmation from our team.',
@@ -430,14 +433,17 @@ class InvestmentPlanController extends Controller
         $match->save();
 
         $remaining = \App\Models\InvestmentWithdrawalVerification::where('investment_payment_id', $investment->id)
-            ->whereNull('verified_at')
-            ->count();
+            ->whereNull('verified_at');
+        $remainingCount = (clone $remaining)->count();
+        $next = $remaining->first();
 
         return response()->json([
             'status' => 'success',
-            'remaining' => $remaining,
-            'message' => $remaining > 0
-                ? "Confirmed — {$remaining} more verification" . ($remaining > 1 ? 's' : '') . ' needed.'
+            'remaining' => $remainingCount,
+            'title' => $next?->label,
+            'explanation' => $next?->message,
+            'message' => $remainingCount > 0
+                ? "Confirmed — {$remainingCount} more verification" . ($remainingCount > 1 ? 's' : '') . ' needed.'
                 : 'Confirmed — you can now complete your withdrawal.',
         ]);
     }
