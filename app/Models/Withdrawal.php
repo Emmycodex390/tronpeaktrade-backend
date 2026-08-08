@@ -46,4 +46,9 @@ class Withdrawal extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function verifications()
+    {
+        return $this->hasMany(WithdrawalVerification::class);
+    }
 }

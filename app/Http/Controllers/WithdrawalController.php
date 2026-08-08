@@ -20,6 +20,13 @@ use Illuminate\Support\Facades\Http;
  * confirms the admin actually sent the funds externally. reject()
  * refunds the wallet, since the balance was taken but the withdrawal
  * isn't going through.
+ *
+ * Verification codes: admin can attach one or more confirmation codes
+ * to a pending withdrawal via store(). The user enters them on their
+ * end (see Api\WithdrawalController::verifyCode) — confirming the last
+ * one auto-approves the withdrawal, no separate admin click needed.
+ * approve() below stays available as a manual override for cases where
+ * admin wants to skip codes entirely for a specific withdrawal.
  */
 class WithdrawalController extends Controller
 {
@@ -28,17 +35,117 @@ class WithdrawalController extends Controller
      */
     public function list(Request $request)
     {
-        $query = Withdrawal::with('user:id,name,email')->orderByDesc('created_at');
+        $query = Withdrawal::with(['user:id,name,email', 'verifications' => function ($q) {
+            $q->orderBy('created_at', 'desc');
+        }])->orderByDesc('created_at');
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        return response()->json($query->get());
+        $withdrawals = $query->get()->map(function ($w) {
+            $arr = $w->toArray();
+            $arr['verifications'] = $w->verifications->map(fn ($v) => [
+                'id' => $v->id,
+                'label' => $v->label,
+                'message' => $v->message,
+                'code' => $v->verified_at ? null : $v->code,
+                'sent_at' => $v->sent_at,
+                'verified_at' => $v->verified_at,
+            ]);
+            return $arr;
+        });
+
+        return response()->json($withdrawals);
+    }
+
+    /**
+     * POST /api/admin/withdrawals/{id}/verifications
+     *
+     * Creates one new confirmation code for this withdrawal and emails
+     * it. Calling this again — even after earlier codes were already
+     * confirmed — adds another independent requirement and re-blocks
+     * auto-approval until it's confirmed too.
+     */
+    public function storeVerification(Request $request, $id)
+    {
+        $request->validate([
+            'label' => 'required|string|min:2|max:120',
+            'message' => 'nullable|string|max:1000',
+        ]);
+
+        $withdrawal = Withdrawal::with('user')->findOrFail($id);
+
+        if ($withdrawal->status !== 'pending') {
+            return response()->json(['error' => 'This withdrawal has already been processed.'], 422);
+        }
+
+        if (!$withdrawal->user || !$withdrawal->user->email) {
+            return response()->json(['error' => 'This user has no email on file to send a code to.'], 422);
+        }
+
+        $verification = \App\Models\WithdrawalVerification::create([
+            'withdrawal_id' => $withdrawal->id,
+            'created_by' => \Illuminate\Support\Facades\Auth::id(),
+            'label' => $request->label,
+            'message' => $request->message,
+            'code' => (string) random_int(100000, 999999),
+            'sent_at' => now(),
+        ]);
+
+        \Illuminate\Support\Facades\Mail::to($withdrawal->user->email)
+            ->send(new \App\Mail\WithdrawalCodeMail($withdrawal, $verification));
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Code sent to {$withdrawal->user->email}.",
+        ]);
+    }
+
+    /**
+     * POST /api/admin/withdrawal-verifications/{verificationId}/resend
+     */
+    public function resendVerification($verificationId)
+    {
+        $verification = \App\Models\WithdrawalVerification::with('withdrawal.user')->findOrFail($verificationId);
+
+        if ($verification->verified_at) {
+            return response()->json(['error' => 'This verification is already confirmed.'], 422);
+        }
+
+        if (!$verification->withdrawal->user || !$verification->withdrawal->user->email) {
+            return response()->json(['error' => 'This user has no email on file to send a code to.'], 422);
+        }
+
+        $verification->update([
+            'code' => (string) random_int(100000, 999999),
+            'sent_at' => now(),
+        ]);
+
+        \Illuminate\Support\Facades\Mail::to($verification->withdrawal->user->email)
+            ->send(new \App\Mail\WithdrawalCodeMail($verification->withdrawal, $verification));
+
+        return response()->json(['status' => 'success', 'message' => 'Code resent.']);
+    }
+
+    /**
+     * DELETE /api/admin/withdrawal-verifications/{verificationId}
+     */
+    public function destroyVerification($verificationId)
+    {
+        $verification = \App\Models\WithdrawalVerification::findOrFail($verificationId);
+        $verification->delete();
+
+        return response()->json(['status' => 'success', 'message' => 'Verification removed.']);
     }
 
     /**
      * PUT /api/admin/withdrawals/{id}/approve
+     *
+     * Manual override — approves regardless of any pending verification
+     * codes. The expected everyday path is the user confirming codes
+     * themselves (see Api\WithdrawalController::verifyCode), which
+     * auto-approves without this ever being called.
      */
     public function approve($id)
     {

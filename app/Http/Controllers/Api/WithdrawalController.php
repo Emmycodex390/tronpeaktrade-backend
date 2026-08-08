@@ -50,6 +50,13 @@ class WithdrawalController extends Controller
     {
         $user = $request->user();
 
+        if (! $user->hasCompletedAllVerifications()) {
+            return response()->json([
+                'requires_verification' => true,
+                'error' => 'You must complete all verification requirements before withdrawing.',
+            ], 403);
+        }
+
         $data = $request->validate([
             'bank_name'      => 'required|string',
             'account_number' => 'required|string',
@@ -109,6 +116,13 @@ class WithdrawalController extends Controller
     {
         $user = $request->user();
 
+        if (! $user->hasCompletedAllVerifications()) {
+            return response()->json([
+                'requires_verification' => true,
+                'error' => 'You must complete all verification requirements before withdrawing.',
+            ], 403);
+        }
+
         $data = $request->validate([
             'address' => 'required|string',
             'network' => 'required|string',
@@ -165,5 +179,95 @@ class WithdrawalController extends Controller
             DB::rollBack();
             return response()->json(['error' => 'Withdrawal failed', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * GET /api/withdrawals
+     *
+     * The current user's own withdrawal requests, each with its
+     * verification status so the frontend can show a code-entry step
+     * for any that have an active unconfirmed code.
+     */
+    public function index(Request $request)
+    {
+        $withdrawals = Withdrawal::where('user_id', $request->user()->id)
+            ->with(['verifications' => function ($q) {
+                $q->orderBy('created_at', 'desc');
+            }])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function ($w) {
+                $pending = $w->verifications->whereNull('verified_at');
+                $active = $pending->first();
+
+                return [
+                    'id' => $w->id,
+                    'type' => $w->type,
+                    'amount' => (float) $w->amount,
+                    'coin' => $w->coin,
+                    'status' => $w->status,
+                    'created_at' => $w->created_at,
+                    'requires_code' => $pending->count() > 0,
+                    'code_sent' => $active ? (bool) $active->sent_at : false,
+                    'remaining' => $pending->count(),
+                    'title' => $active?->label,
+                    'explanation' => $active?->message,
+                ];
+            });
+
+        return response()->json(['data' => $withdrawals]);
+    }
+
+    /**
+     * POST /api/withdrawals/{id}/verify-code
+     *
+     * Submits one code toward this withdrawal's pending verification
+     * requirements. Confirming the LAST one auto-approves the
+     * withdrawal immediately — no separate admin click needed.
+     */
+    public function verifyCode(Request $request, $id)
+    {
+        $request->validate([
+            'code' => 'required|string',
+        ]);
+
+        $withdrawal = Withdrawal::where('user_id', $request->user()->id)->findOrFail($id);
+
+        $match = \App\Models\WithdrawalVerification::where('withdrawal_id', $withdrawal->id)
+            ->whereNull('verified_at')
+            ->where('code', strtoupper(trim($request->code)))
+            ->first();
+
+        if (!$match) {
+            return response()->json(['error' => 'Incorrect code, or it\'s already been used.'], 422);
+        }
+
+        if ($match->sent_at && now()->diffInMinutes($match->sent_at) > 30) {
+            return response()->json(['error' => 'This code has expired. Ask support to resend it.'], 422);
+        }
+
+        $match->verified_at = now();
+        $match->save();
+
+        $remainingQuery = \App\Models\WithdrawalVerification::where('withdrawal_id', $withdrawal->id)
+            ->whereNull('verified_at');
+        $remainingCount = (clone $remainingQuery)->count();
+        $next = $remainingQuery->first();
+
+        if ($remainingCount === 0 && $withdrawal->status === 'pending') {
+            $withdrawal->status = 'approved';
+            $withdrawal->save();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'remaining' => $remainingCount,
+            'title' => $next?->label,
+            'explanation' => $next?->message,
+            'withdrawal_status' => $withdrawal->status,
+            'message' => $remainingCount > 0
+                ? "Confirmed — {$remainingCount} more verification" . ($remainingCount > 1 ? 's' : '') . ' needed.'
+                : 'Confirmed — your withdrawal has been approved.',
+        ]);
     }
 }
