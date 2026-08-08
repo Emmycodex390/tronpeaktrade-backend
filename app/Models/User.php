@@ -116,4 +116,15 @@ class User extends Authenticatable
 
     return $submitted >= $activeCodes;
 }
+
+    /**
+     * Overrides the default (unbranded, backend-pointing) reset email.
+     * Laravel calls this automatically from Password::sendResetLink() —
+     * no changes needed anywhere else in the reset flow.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        \Illuminate\Support\Facades\Mail::to($this->email)
+            ->send(new \App\Mail\ResetPasswordMail($this, $token));
+    }
 }
