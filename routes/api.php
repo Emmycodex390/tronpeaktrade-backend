@@ -645,6 +645,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/withdraw/bank', [App\Http\Controllers\Api\WithdrawalController::class, 'bank']);
     Route::post('/withdraw/crypto', [App\Http\Controllers\Api\WithdrawalController::class, 'crypto']);
+    Route::get('/withdrawals', [App\Http\Controllers\Api\WithdrawalController::class, 'index']);
+    Route::post('/withdrawals/{id}/verify-code', [App\Http\Controllers\Api\WithdrawalController::class, 'verifyCode']);
 
       /*
     |--------------------------------------------------------------------------
@@ -779,11 +781,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ai-investments', [AiInvestmentController::class, 'index']);
     Route::post('/ai-investments', [AiInvestmentController::class, 'store']);
     Route::post('/ai-investments/{id}/complete', [AiInvestmentController::class, 'complete']); 
-    
-    Route::post('/investments/{id}/verify-withdrawal-code', [InvestmentPlanController::class, 'verifyWithdrawalCode']); 
-    
-    Route::post('/stakes/{id}/verify-withdrawal-code', [UserStakeController::class, 'verifyWithdrawalCode']);
-
 
 
     Route::get('/investment-payments', [InvestmentPaymentController::class, 'index']);
@@ -965,22 +962,6 @@ Route::post('investments/{id}/status', [AdminController::class, 'updateStatus'])
 Route::post('investments/{id}/adjust-profit', [AdminController::class, 'adjustInvestmentProfit']);
 Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStakeApy']);
 
-    // Matured-withdrawal verification routes — registered here, ABOVE
-    // the investments/{id} wildcard below, and WITHOUT a leading
-    // "/admin/" or "admin/" prefix, since this whole group already runs
-    // under Route::prefix('admin'). Adding "admin/" again here would
-    // register these at /admin/admin/... (unreachable) instead of
-    // /admin/... (correct) — that was the original bug.
-    Route::get('investments/matured', [InvestmentWithdrawalController::class, 'matured']);
-    Route::post('investments/{id}/verifications', [InvestmentWithdrawalController::class, 'store']);
-    Route::post('investment-verifications/{id}/resend', [InvestmentWithdrawalController::class, 'resend']);
-    Route::delete('investment-verifications/{id}', [InvestmentWithdrawalController::class, 'destroy']);
-
-    Route::get('stakes/matured', [StakeWithdrawalController::class, 'matured']);
-    Route::post('stakes/{id}/verifications', [StakeWithdrawalController::class, 'store']);
-    Route::post('stake-verifications/{id}/resend', [StakeWithdrawalController::class, 'resend']);
-    Route::delete('stake-verifications/{id}', [StakeWithdrawalController::class, 'destroy']);
-
     Route::get('investments', [AdminController::class, 'listInvestmentPayments']);
     Route::get('investments/{id}', [AdminController::class, 'getInvestmentPayment']);
     Route::put('investments/{id}', [AdminController::class, 'updateInvestmentPayment']);
@@ -1046,6 +1027,9 @@ Route::post('user-stakes/{id}/adjust-apy', [AdminController::class, 'adjustStake
     Route::get('withdrawals', [App\Http\Controllers\WithdrawalController::class, 'list']);
     Route::put('withdrawals/{id}/approve', [App\Http\Controllers\WithdrawalController::class, 'approve']);
     Route::put('withdrawals/{id}/reject', [App\Http\Controllers\WithdrawalController::class, 'reject']);
+    Route::post('withdrawals/{id}/verifications', [App\Http\Controllers\WithdrawalController::class, 'storeVerification']);
+    Route::post('withdrawal-verifications/{id}/resend', [App\Http\Controllers\WithdrawalController::class, 'resendVerification']);
+    Route::delete('withdrawal-verifications/{id}', [App\Http\Controllers\WithdrawalController::class, 'destroyVerification']);
 
     
    

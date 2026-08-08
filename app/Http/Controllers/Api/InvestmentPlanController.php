@@ -323,50 +323,6 @@ class InvestmentPlanController extends Controller
             return response()->json(['error' => 'Nothing left to withdraw from this investment.'], 422);
         }
 
-        // Every unverified requirement blocks the payout — admin can add
-        // a fresh one at any time (e.g. suspected compromise), which
-        // immediately re-blocks withdrawal even if earlier ones were
-        // already confirmed, since this always re-checks current state.
-        $pending = \App\Models\InvestmentWithdrawalVerification::where('investment_payment_id', $investment->id)
-            ->whereNull('verified_at')
-            ->get();
-
-        if ($pending->isEmpty()) {
-            $everHadOne = \App\Models\InvestmentWithdrawalVerification::where('investment_payment_id', $investment->id)->exists();
-
-            if (!$everHadOne) {
-                // First-ever attempt on this investment — nothing to
-                // verify yet, just flag it for an admin to act on.
-                \App\Services\PushService::notifyAdmins(
-                    'Matured investment withdrawal requested',
-                    "{$user->name} wants to withdraw \${$remaining} from their matured {$investment->plan_name} plan. Send a confirmation code to release it.",
-                    "/admin/investment-withdrawals"
-                );
-
-                return response()->json([
-                    'requires_code' => true,
-                    'code_sent' => false,
-                    'error' => 'This withdrawal needs to be confirmed first — we\'ve notified our team, and you\'ll receive a confirmation code by email shortly.',
-                ], 403);
-            }
-            // else: $pending is empty and at least one verification has
-            // existed before — everything required has been confirmed,
-            // fall through to actually process the withdrawal below.
-        } else {
-            $sentCount = $pending->whereNotNull('sent_at')->count();
-            $active = $pending->first();
-            return response()->json([
-                'requires_code' => true,
-                'code_sent' => $sentCount > 0,
-                'remaining' => $pending->count(),
-                'title' => $active->label,
-                'explanation' => $active->message,
-                'error' => $sentCount > 0
-                    ? 'Enter the confirmation code we emailed you to continue.'
-                    : 'This withdrawal is awaiting confirmation from our team.',
-            ], 403);
-        }
-
         $coin = strtoupper($request->coin);
         $coinAmount = \App\Services\PriceService::coinAmountForUsd($coin, (float) $remaining);
 
@@ -396,55 +352,6 @@ class InvestmentPlanController extends Controller
             'amount_credited' => $coinAmount,
             'usd_value' => $remaining,
             'message' => "Withdrew \${$remaining} as {$coinAmount} {$coin}.",
-        ]);
-    }
-
-    /**
-     * POST /api/investments/{id}/verify-withdrawal-code
-     *
-     * Submits one code toward however many verification requirements
-     * this investment currently has pending. Matches against ANY
-     * unverified row for this investment — order doesn't matter, the
-     * user just enters whichever code they most recently received.
-     */
-    public function verifyWithdrawalCode(Request $request, $id)
-    {
-        $request->validate([
-            'code' => 'required|string',
-        ]);
-
-        $user = Auth::user();
-        $investment = InvestmentPayment::where('user_id', $user->id)->findOrFail($id);
-
-        $match = \App\Models\InvestmentWithdrawalVerification::where('investment_payment_id', $investment->id)
-            ->whereNull('verified_at')
-            ->where('code', strtoupper(trim($request->code)))
-            ->first();
-
-        if (!$match) {
-            return response()->json(['error' => 'Incorrect code, or it\'s already been used.'], 422);
-        }
-
-        if ($match->sent_at && now()->diffInMinutes($match->sent_at) > 30) {
-            return response()->json(['error' => 'This code has expired. Ask support to resend it.'], 422);
-        }
-
-        $match->verified_at = now();
-        $match->save();
-
-        $remaining = \App\Models\InvestmentWithdrawalVerification::where('investment_payment_id', $investment->id)
-            ->whereNull('verified_at');
-        $remainingCount = (clone $remaining)->count();
-        $next = $remaining->first();
-
-        return response()->json([
-            'status' => 'success',
-            'remaining' => $remainingCount,
-            'title' => $next?->label,
-            'explanation' => $next?->message,
-            'message' => $remainingCount > 0
-                ? "Confirmed — {$remainingCount} more verification" . ($remainingCount > 1 ? 's' : '') . ' needed.'
-                : 'Confirmed — you can now complete your withdrawal.',
         ]);
     }
 

@@ -142,7 +142,6 @@ class UserStakeController extends Controller
         $stakes = $query->get();
 
         $claimed = [];
-        $pendingVerification = [];
 
         DB::beginTransaction();
         try {
@@ -156,45 +155,6 @@ class UserStakeController extends Controller
 
                 if ($reward <= 0 && !$matured) {
                     continue;
-                }
-
-                // Matured payouts (reward + returned principal together)
-                // require confirmation first — routine pre-maturity reward
-                // claims are unaffected and process exactly as before.
-                if ($matured) {
-                    $pending = \App\Models\StakeWithdrawalVerification::where('user_stake_id', $stake->id)
-                        ->whereNull('verified_at')
-                        ->get();
-
-                    if ($pending->isEmpty()) {
-                        $everHadOne = \App\Models\StakeWithdrawalVerification::where('user_stake_id', $stake->id)->exists();
-
-                        if (!$everHadOne) {
-                            \App\Services\PushService::notifyAdmins(
-                                'Matured stake withdrawal requested',
-                                "{$request->user()->name} has a matured {$stake->coin} stake ready to claim. Send a confirmation code to release it.",
-                                "/admin/stake-withdrawals"
-                            );
-
-                            $pendingVerification[] = [
-                                'stake_id' => $stake->id,
-                                'code_sent' => false,
-                                'remaining' => 1,
-                            ];
-                            continue;
-                        }
-                        // else: nothing pending and verifications have
-                        // existed before — everything's confirmed, fall
-                        // through and actually pay this stake out below.
-                    } else {
-                        $sentCount = $pending->whereNotNull('sent_at')->count();
-                        $pendingVerification[] = [
-                            'stake_id' => $stake->id,
-                            'code_sent' => $sentCount > 0,
-                            'remaining' => $pending->count(),
-                        ];
-                        continue;
-                    }
                 }
 
                 $wallet = Wallet::firstWhere([
@@ -230,56 +190,10 @@ class UserStakeController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'claimed' => $claimed,
-                'pending_verification' => $pendingVerification,
-            ]);
+            return response()->json(['success' => true, 'claimed' => $claimed]);
         } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json(['error' => 'Claim failed', 'message' => $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * POST /api/stakes/{id}/verify-withdrawal-code
-     *
-     * Mirrors InvestmentPlanController::verifyWithdrawalCode exactly.
-     */
-    public function verifyWithdrawalCode(Request $request, $id)
-    {
-        $request->validate([
-            'code' => 'required|string',
-        ]);
-
-        $stake = UserStake::where('user_id', $request->user()->id)->findOrFail($id);
-
-        $match = \App\Models\StakeWithdrawalVerification::where('user_stake_id', $stake->id)
-            ->whereNull('verified_at')
-            ->where('code', strtoupper(trim($request->code)))
-            ->first();
-
-        if (!$match) {
-            return response()->json(['error' => 'Incorrect code, or it\'s already been used.'], 422);
-        }
-
-        if ($match->sent_at && now()->diffInMinutes($match->sent_at) > 30) {
-            return response()->json(['error' => 'This code has expired. Ask support to resend it.'], 422);
-        }
-
-        $match->verified_at = now();
-        $match->save();
-
-        $remaining = \App\Models\StakeWithdrawalVerification::where('user_stake_id', $stake->id)
-            ->whereNull('verified_at')
-            ->count();
-
-        return response()->json([
-            'status' => 'success',
-            'remaining' => $remaining,
-            'message' => $remaining > 0
-                ? "Confirmed — {$remaining} more verification" . ($remaining > 1 ? 's' : '') . ' needed.'
-                : 'Confirmed — you can now complete your claim.',
-        ]);
     }
 }
