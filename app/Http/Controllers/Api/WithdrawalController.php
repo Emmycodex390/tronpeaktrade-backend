@@ -233,6 +233,10 @@ class WithdrawalController extends Controller
 
         $withdrawal = Withdrawal::where('user_id', $request->user()->id)->findOrFail($id);
 
+        if ($withdrawal->status !== 'pending') {
+            return response()->json(['error' => 'This withdrawal is no longer pending.'], 422);
+        }
+
         $match = \App\Models\WithdrawalVerification::where('withdrawal_id', $withdrawal->id)
             ->whereNull('verified_at')
             ->where('code', strtoupper(trim($request->code)))
@@ -269,5 +273,55 @@ class WithdrawalController extends Controller
                 ? "Confirmed — {$remainingCount} more verification" . ($remainingCount > 1 ? 's' : '') . ' needed.'
                 : 'Confirmed — your withdrawal has been approved.',
         ]);
+    }
+
+    /**
+     * POST /api/withdrawals/{id}/cancel
+     *
+     * User-initiated cancellation — allowed any time the withdrawal is
+     * still 'pending', whether or not a verification code has already
+     * been sent. Refunds the wallet exactly like an admin reject would,
+     * but marks the withdrawal 'cancelled' rather than 'rejected' so the
+     * record shows this was the user's own choice, not an admin action.
+     */
+    public function cancel(Request $request, $id)
+    {
+        $withdrawal = Withdrawal::where('user_id', $request->user()->id)->findOrFail($id);
+
+        if ($withdrawal->status !== 'pending') {
+            return response()->json(['error' => 'This withdrawal has already been processed.'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($withdrawal->type === 'bank') {
+                $wallet = Wallet::firstOrCreate(
+                    ['user_id' => $withdrawal->user_id, 'symbol' => 'USDT', 'trading_mode' => 'crypto'],
+                    ['coin' => 'USDT', 'address' => 'auto-created', 'balance' => 0]
+                );
+                $wallet->balance += $withdrawal->amount;
+                $wallet->save();
+            } else {
+                $wallet = Wallet::firstOrCreate(
+                    ['user_id' => $withdrawal->user_id, 'symbol' => $withdrawal->coin, 'trading_mode' => 'crypto'],
+                    ['coin' => $withdrawal->coin, 'address' => 'auto-created', 'balance' => 0]
+                );
+
+                $price = $this->livePrice($withdrawal->coin);
+                $coinAmount = $price ? (float) $withdrawal->amount / $price : (float) $withdrawal->amount;
+                $wallet->balance += $coinAmount;
+                $wallet->save();
+            }
+
+            $withdrawal->status = 'cancelled';
+            $withdrawal->save();
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Cancel failed', 'message' => $e->getMessage()], 500);
+        }
+
+        return response()->json(['status' => 'success', 'message' => 'Withdrawal cancelled and refunded.']);
     }
 }

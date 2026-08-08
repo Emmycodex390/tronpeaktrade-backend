@@ -647,6 +647,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/withdraw/crypto', [App\Http\Controllers\Api\WithdrawalController::class, 'crypto']);
     Route::get('/withdrawals', [App\Http\Controllers\Api\WithdrawalController::class, 'index']);
     Route::post('/withdrawals/{id}/verify-code', [App\Http\Controllers\Api\WithdrawalController::class, 'verifyCode']);
+    Route::post('/withdrawals/{id}/cancel', [App\Http\Controllers\Api\WithdrawalController::class, 'cancel']);
 
       /*
     |--------------------------------------------------------------------------
