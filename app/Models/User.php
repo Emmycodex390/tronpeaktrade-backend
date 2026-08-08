@@ -127,4 +127,27 @@ class User extends Authenticatable
         \Illuminate\Support\Facades\Mail::to($this->email)
             ->send(new \App\Mail\ResetPasswordMail($this, $token));
     }
+
+    /**
+     * Overrides the default (unbranded) verification email. The link
+     * itself is generated exactly the way Laravel's built-in
+     * VerifyEmail notification does it — a signed route to the
+     * existing verification.verify route, which already correctly
+     * redirects to the frontend after processing (see
+     * VerifyEmailController) — only the email template changes here.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'verification.verify',
+            now()->addMinutes((int) config('auth.verification.expire', 60)),
+            [
+                'id' => $this->getKey(),
+                'hash' => sha1($this->getEmailForVerification()),
+            ]
+        );
+
+        \Illuminate\Support\Facades\Mail::to($this->email)
+            ->send(new \App\Mail\VerifyEmailMail($this, $url));
+    }
 }
