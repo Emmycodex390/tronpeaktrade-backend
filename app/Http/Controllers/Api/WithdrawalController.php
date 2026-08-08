@@ -50,11 +50,13 @@ class WithdrawalController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasCompletedAllVerifications()) {
+        $existingPending = Withdrawal::where('user_id', $user->id)->where('status', 'pending')->first();
+        if ($existingPending) {
             return response()->json([
-                'requires_verification' => true,
-                'error' => 'You must complete all verification requirements before withdrawing.',
-            ], 403);
+                'has_pending' => true,
+                'pending' => $existingPending,
+                'error' => 'You already have a pending withdrawal. Cancel it before starting a new one.',
+            ], 409);
         }
 
         $data = $request->validate([
@@ -116,11 +118,13 @@ class WithdrawalController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasCompletedAllVerifications()) {
+        $existingPending = Withdrawal::where('user_id', $user->id)->where('status', 'pending')->first();
+        if ($existingPending) {
             return response()->json([
-                'requires_verification' => true,
-                'error' => 'You must complete all verification requirements before withdrawing.',
-            ], 403);
+                'has_pending' => true,
+                'pending' => $existingPending,
+                'error' => 'You already have a pending withdrawal. Cancel it before starting a new one.',
+            ], 409);
         }
 
         $data = $request->validate([
